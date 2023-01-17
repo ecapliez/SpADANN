@@ -87,7 +87,6 @@ class GradReverse(Layer):
         return gradient_reverse(x, lamb_da)
 
 
-
 class SpADANN(keras.Model):
   """"SpADANN model is composed of
   a feature extractor: encoder
