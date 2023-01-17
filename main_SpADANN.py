@@ -296,7 +296,6 @@ print('**********************************************************************')
 print("Final results : Cohen's Kappa score =%1.3f" % kappa_TD)
 print('**********************************************************************')
 print('\n')
-  
 
 print("End of the evaluation on full target domain")
 print("#############################################")    
