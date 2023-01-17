@@ -20,13 +20,13 @@ from SpADANN_model import SpADANN
 tf.keras.backend.set_floatx('float32')
 
 # Computing on CPU or GPU 
-if sys.argv[8] == "-1":
+if sys.argv[7] == "-1":
     # Computation on CPU only, no use of GPU
     os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 else:
     # Computation on GPU with index sys.argv[8]
     os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"]=sys.argv[8]
+    os.environ["CUDA_VISIBLE_DEVICES"]=sys.argv[7]
     # Avoid use of full GPU RAM if not necessary
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(gpus[0], True)
@@ -170,7 +170,7 @@ def train_SpADANN(model, optimizer, s_X, s_y, t_X,\
 # Script main body
 
 # Testing of script arguments number
-if len(sys.argv) != 10:
+if len(sys.argv) != 8:
     print("!!! Error : wrong number of arguments !!!")
     print("!!! Stop script                       !!!")
     exit()
