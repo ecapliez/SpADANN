@@ -22,15 +22,14 @@ tf.keras.backend.set_floatx('float32')
 # Computing on CPU or GPU 
 if sys.argv[7] == "-1":
     # Computation on CPU only, no use of GPU
-    os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 else:
     # Computation on GPU with index sys.argv[8]
-    os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"]=sys.argv[7]
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[7]
     # Avoid use of full GPU RAM if not necessary
     gpus = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(gpus[0], True)
-
 
 # Global variables
 loss_pred_set = []
@@ -42,113 +41,113 @@ PL_accuracy = []
 
 
 def getBatch(X, i, batch_size):
-    start_id = (i*batch_size)
-    end_id = min((i+1) * batch_size, X.shape[0])
+    start_id = (i * batch_size)
+    end_id = min((i + 1) * batch_size, X.shape[0])
     batch_x = X[start_id:end_id]
     return batch_x
 
 
-def train_SpADANN(model, optimizer, s_X, s_y, t_X,\
-                      t_y, num_epochs, batch_size, bn_flag,\
-                          loss_fn, nb_class):
+def train_SpADANN(model, optimizer, s_X, s_y, t_X, \
+                  t_y, num_epochs, batch_size, bn_flag, \
+                  loss_fn, nb_class):
     """"Training function for SpADANN model"""
-    
+
     global loss_pred_set, loss_domain_source_set
     global loss_pred_set_PL, loss_combined_set, target_f1, PL_accuracy
     global beta
-    
+
     epochs = range(num_epochs)
-    
+
     nb_samples = s_X.shape[0]
     iterations = nb_samples / batch_size
     if nb_samples % batch_size != 0:
         iterations += 1
-    
+
     test_X = t_X.copy()
     test_y = t_y.copy()
-    
+
     for epoch in epochs:
-        s_X, s_y, t_X, t_y = shuffle(s_X, s_y, t_X, t_y) 
-                
+        s_X, s_y, t_X, t_y = shuffle(s_X, s_y, t_X, t_y)
+
         # alpha is for a progressive taking into account of Pseudo-Labels (PL)
         alpha = beta * (float(epoch) / num_epochs)
-        
+
         # lamb_da (lambda_da) is for a progressive use of gradient reversal
         # Cf. DANN paper
         lamb_da = 2 / (1 + np.exp(-10 * (float(epoch) / num_epochs),
                                   dtype=np.float32)) - 1
         lamb_da = lamb_da.astype('float32')
-        
+
         PL_global_set = []
         test_y_2cpe = []
-                                
+
         for ibatch in range(int(iterations)):
             batch_source_ts = getBatch(s_X, ibatch, batch_size)
             batch_source_y = getBatch(s_y, ibatch, batch_size)
-            
+
             batch_target_ts = getBatch(t_X, ibatch, batch_size)
             batch_target_y = getBatch(t_y, ibatch, batch_size)
-                        
+
             with tf.GradientTape() as tape:
                 # Model application for the source domain
-                _, lpred_source, dpred_source\
+                _, lpred_source, dpred_source \
                     = model(batch_source_ts, bn_flag, lamb_da)
 
                 # Model application for the target domain    
-                _, lpred_target, dpred_target\
+                _, lpred_target, dpred_target \
                     = model(batch_target_ts, bn_flag, lamb_da)
-                
+
                 # Pseudo label selection on target domain
                 lpred_src = np.argmax(lpred_source, axis=1)
                 lpred_tgt = np.argmax(lpred_target, axis=1)
                 first_cond = (lpred_src == batch_source_y)
                 second_cond = (lpred_src == lpred_tgt)
                 result = (first_cond & second_cond).astype(int)
-                
+
                 # Calculation of loss on label prediction on source domain
                 loss_pred = loss_fn(batch_source_y, lpred_source)
 
                 # Calculation of loss on domain prediction
-                loss_domain\
-                    = loss_fn(tf.concat([np.ones(batch_source_ts.shape[0]), 
-                                         np.zeros(batch_target_ts.shape[0])], 
+                loss_domain \
+                    = loss_fn(tf.concat([np.ones(batch_source_ts.shape[0]),
+                                         np.zeros(batch_target_ts.shape[0])],
                                         axis=0),
-                              tf.concat([dpred_source, dpred_target], 
+                              tf.concat([dpred_source, dpred_target],
                                         axis=0))
-                
+
                 # Calculation of loss on pseudo-labels on source domain
-                loss_pred_PL\
+                loss_pred_PL \
                     = loss_fn(lpred_tgt, lpred_target, sample_weight=result)
-                    
+
                 # Calculation of combined loss
-                loss_combined = (1 - alpha) * (loss_pred + loss_domain)\
-                    + alpha * loss_pred_PL
-                
+                loss_combined = (1 - alpha) * (loss_pred + loss_domain) \
+                                + alpha * loss_pred_PL
+
                 # Pseudo-labels and true labels on target domain aggregation
                 PL_global_set.append(lpred_tgt[np.where(result == 1)])
                 test_y_2cpe.append(batch_target_y[np.where(result == 1)])
-                  
+
             grads = tape.gradient(loss_combined, model.trainable_variables)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
-            
+
             train_loss(loss_pred)
             domain_loss(loss_domain)
             train_loss_PL(loss_pred_PL)
             value_loss(loss_combined)
-        
+
         # Evaluation on full target domain                
         _, pred_test_target, _ = model.predict(test_X, batch_size=1024)
         fscoreT = f1_score(test_y, np.argmax(pred_test_target, axis=1),
                            average="weighted")
         # Computation of global accuracy on target domain PL
-        PL_global_set\
+        PL_global_set \
             = np.concatenate(np.asarray(PL_global_set, dtype=object), axis=0)
-        PL_counter = PL_global_set.shape[0]    
-        test_y_2cpe\
+        PL_counter = PL_global_set.shape[0]
+        test_y_2cpe \
             = np.concatenate(np.asarray(test_y_2cpe, dtype=object), axis=0)
         accuracy_PL = accuracy_score(test_y_2cpe, PL_global_set)
         PL_accuracy.append(accuracy_PL)
-        
+
         # Printing of different scores
         print("Epoch %d | "
               " TRAIN LOSS %.5f | DOMAIN LOSS %.5f |"
@@ -157,7 +156,7 @@ def train_SpADANN(model, optimizer, s_X, s_y, t_X,\
               % (epoch, train_loss.result(), domain_loss.result(),
                  train_loss_PL.result(), value_loss.result(),
                  fscoreT, PL_counter, accuracy_PL))
-                     
+
         # Scores saving to use for graphic
         loss_pred_set.append(train_loss.result())
         loss_domain_set.append(domain_loss.result())
@@ -176,8 +175,8 @@ if len(sys.argv) != 8:
     exit()
 
 # Retrieval of values passed through script arguments
-s_year = sys.argv[1] # Year of source domaine
-t_year = sys.argv[2] # Year of target domain
+s_year = sys.argv[1]  # Year of source domaine
+t_year = sys.argv[2]  # Year of target domain
 learning_rate = float(sys.argv[3])
 num_epochs = int(sys.argv[4])
 batch_size = int(sys.argv[5])
@@ -195,8 +194,8 @@ pth2R = "Results/"
 Path(pth2R).mkdir(exist_ok=True, parents=True)
 
 # Useful for retrieving identify and retrieve results
-suffix = '_'+sys.argv[1]+'_'+sys.argv[2]+'_'+sys.argv[3]+'_'+sys.argv[4]+'_'\
-        +sys.argv[5]+'_'+sys.argv[6]
+suffix = '_' + sys.argv[1] + '_' + sys.argv[2] + '_' + sys.argv[3] + '_' + sys.argv[4] + '_' \
+         + sys.argv[5] + '_' + sys.argv[6]
 
 # Source and target data
 # Let N the number of pixels (samples)
@@ -233,7 +232,6 @@ domain_loss = tf.keras.metrics.Mean(name='domain_loss')
 train_loss_PL = tf.keras.metrics.Mean(name='train_loss_PL')
 value_loss = tf.keras.metrics.Mean(name='value_loss')
 
-
 # Training phase
 print("###########################")
 print("Start of the training loop")
@@ -247,10 +245,10 @@ print("Batch size: ", batch_size)
 print("beta = ", beta)
 
 train_SpADANN(model, optimizer, s_X, s_y, t_X, t_y, num_epochs, batch_size,
-                  bn_flag, loss_fn, nb_class)
+              bn_flag, loss_fn, nb_class)
 
 # Model backup
-model.save_weights(pth2MD+sd+model_file_name)
+model.save_weights(pth2MD + sd + model_file_name)
 
 # Graphic regarding training phase
 x_axis = [j for j in range(0, num_epochs)]
@@ -267,19 +265,18 @@ plt.close()
 print("End of the training loop")
 print("#########################")
 
-
 # Evaluation phase
 print("#############################################")
 print("Start of the evaluation on full target domain")
 print("---------------------------------------------")
 
 _, pred_test_target, _ = model.predict(t_X, batch_size=1024)
-       
+
 # Backup for further analysis of t_X, t_y and label prediction on t_X
-Path(pth2R+sd).mkdir(exist_ok=True, parents=True)
-np.save(pth2R+sd+"best_"+model_file_name+"-t_X", t_X)
-np.save(pth2R+sd+"best_"+model_file_name+"-t_y", t_y)
-np.save(pth2R+sd+"best_"+model_file_name+"-predictions", pred_test_target)
+Path(pth2R + sd).mkdir(exist_ok=True, parents=True)
+np.save(pth2R + sd + "best_" + model_file_name + "-t_X", t_X)
+np.save(pth2R + sd + "best_" + model_file_name + "-t_y", t_y)
+np.save(pth2R + sd + "best_" + model_file_name + "-predictions", pred_test_target)
 
 # Calculation of scores
 y_pred = np.argmax(pred_test_target, axis=1)
@@ -298,8 +295,7 @@ print('**********************************************************************')
 print('\n')
 
 print("End of the evaluation on full target domain")
-print("#############################################")    
-
+print("#############################################")
 
 end_date = datetime.now()
 print("Calculation completed at: %s" % str(end_date))
