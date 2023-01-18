@@ -6,4 +6,6 @@ This repository provides code for SpADANN framework which allows temporal domain
 
 This framework is detailed in the research paper "Temporal Domain Adaptation for Satellite Image Time Series Land Cover Mapping with Adversarial Learning and spatially-aware Self-Training" which is currently under submission.
 
-The explanations regarding the format of SITS data handled by SpADANN are included in Python script main_SpADANN.py
+The explanations regarding the format of SITS data handled by SpADANN are included in Python script "main_SpADANN.py".
+
+This project is given under the terms of the MIT license.
