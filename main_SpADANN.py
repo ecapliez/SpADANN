@@ -175,7 +175,7 @@ if len(sys.argv) != 8:
     exit()
 
 # Retrieval of values passed through script arguments
-s_year = sys.argv[1]  # Year of source domaine
+s_year = sys.argv[1]  # Year of source domain
 t_year = sys.argv[2]  # Year of target domain
 learning_rate = float(sys.argv[3])
 num_epochs = int(sys.argv[4])
